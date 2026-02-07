@@ -1,0 +1,411 @@
+{
+  "name": "Pretalx → Pretix Speaker Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pretalx-confirmed",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node-webhook",
+      "name": "Webhook - Pretalx",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "pretalx-confirmed"
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {}
+      },
+      "id": "node-respond",
+      "name": "Respond 200 OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [220, 0]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-state",
+              "leftValue": "={{ $json.submission.state }}",
+              "rightValue": "confirmed",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "cond-old-state",
+              "leftValue": "={{ $json.submission.old_state }}",
+              "rightValue": "accepted",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-filter",
+      "name": "IF - Confirmed from Accepted",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [440, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Webhook - Pretalx').item.json.body.pretalx_url || 'https://cfp.biznagafest.com' }}/api/events/{{ $json.event_slug || $json.submission.event }}/submissions/{{ $json.submission.code }}/?expand=speakers,track,submission_type,slots.room",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "redirect": {
+            "redirect": {
+              "followRedirects": true
+            }
+          }
+        }
+      },
+      "id": "node-get-submission",
+      "name": "GET Submission Details",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PRETALX_CREDENTIAL_ID",
+          "name": "pretalx API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/bot{{ $credentials.telegramBotToken || 'YOUR_BOT_TOKEN' }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"YOUR_TELEGRAM_CHAT_ID\",\n  \"parse_mode\": \"HTML\",\n  \"text\": \"🎤 <b>Nueva charla confirmada</b>\\n\\n📌 <b>{{ $json.title }}</b>\\n\\n👤 <b>Speaker(s):</b> {{ $json.speakers.map(s => s.name).join(', ') }}\\n\\n📝 <b>Abstract:</b>\\n{{ ($json.abstract || '').substring(0, 500) }}\\n\\n🏷️ <b>Track:</b> {{ $json.track?.en || $json.track || 'Sin track' }}\\n🏠 <b>Sala:</b> {{ $json.slot?.room?.en || $json.slot?.room || 'Por definir' }}\\n🕐 <b>Horario:</b> {{ $json.slot?.start || 'Por definir' }} - {{ $json.slot?.end || 'Por definir' }}\\n⏱️ <b>Duración:</b> {{ $json.duration }} min\\n\\n#{{ ($json.track?.en || $json.track || 'General').replace(/\\\\s/g, '') }} #NuevaCharla\"\n}",
+        "options": {}
+      },
+      "id": "node-telegram",
+      "name": "Telegram - Announce Talk",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, -200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Submission data from the GET request\nconst submission = $input.first().json;\n\n// Build one item per speaker\nconst speakers = submission.speakers.map(speaker => ({\n  // Speaker data\n  speaker_code: speaker.code,\n  speaker_name: speaker.name,\n  speaker_email: speaker.email || null,\n  speaker_biography: speaker.biography,\n  speaker_avatar: speaker.avatar,\n\n  // Talk data (copied for each speaker)\n  talk_code: submission.code,\n  talk_title: submission.title,\n  talk_abstract: submission.abstract,\n  talk_track: submission.track?.en || submission.track || 'Sin track',\n  talk_type: submission.submission_type?.en || submission.submission_type || 'Talk',\n  talk_duration: submission.duration,\n  talk_room: submission.slot?.room?.en || submission.slot?.room || 'Por definir',\n  talk_start: submission.slot?.start || 'Por definir',\n  talk_end: submission.slot?.end || 'Por definir',\n  talk_image: submission.image,\n  talk_locale: submission.content_locale || 'es',\n\n  // Metadata for pretix\n  all_speakers: submission.speakers.map(s => s.name).join(', '),\n  speaker_count: submission.speakers.length\n}));\n\nreturn speakers.map(s => ({ json: s }));"
+      },
+      "id": "node-split-speakers",
+      "name": "Code - Split by Speaker",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://cfp.biznagafest.com/api/events/{{ $json.talk_code.split('-')[0] || 'biznagafest-2026' }}/speakers/{{ $json.speaker_code }}/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "node-get-speaker-email",
+      "name": "GET Speaker Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PRETALX_CREDENTIAL_ID",
+          "name": "pretalx API Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge speaker email from API response with existing data\nconst prevData = $('Code - Split by Speaker').item.json;\nconst apiResponse = $input.first().json;\n\nreturn [{\n  json: {\n    ...prevData,\n    speaker_email: apiResponse.email || prevData.speaker_email\n  }\n}];"
+      },
+      "id": "node-merge-email",
+      "name": "Code - Merge Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://tickets.biznagafest.com/api/v1/organizers/YOUR_ORGANIZER_SLUG/events/YOUR_EVENT_SLUG/orders/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"email\": \"{{ $json.speaker_email }}\",\n  \"locale\": \"{{ $json.talk_locale }}\",\n  \"sales_channel\": \"web\",\n  \"payment_provider\": \"manual\",\n  \"status\": \"p\",\n  \"send_mail\": false,\n  \"comment\": \"Speaker entry - Auto-created from pretalx ({{ $json.talk_code }})\",\n  \"positions\": [\n    {\n      \"item\": YOUR_SPEAKER_ITEM_ID,\n      \"price\": \"0.00\",\n      \"attendee_name_parts\": {\n        \"full_name\": \"{{ $json.speaker_name }}\"\n      },\n      \"attendee_email\": \"{{ $json.speaker_email }}\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "id": "node-create-order",
+      "name": "POST Create Pretix Order",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1540, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PRETIX_CREDENTIAL_ID",
+          "name": "pretix API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Save order data and prepare voucher creation\nconst prevData = $('Code - Merge Email').item.json;\nconst order = $input.first().json;\n\nreturn [{\n  json: {\n    ...prevData,\n    pretix_order_code: order.code,\n    pretix_order_url: order.url || `https://tickets.biznagafest.com/YOUR_ORGANIZER_SLUG/YOUR_EVENT_SLUG/order/${order.code}/${order.secret}/`\n  }\n}];"
+      },
+      "id": "node-save-order",
+      "name": "Code - Save Order Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1760, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://tickets.biznagafest.com/api/v1/organizers/YOUR_ORGANIZER_SLUG/events/YOUR_EVENT_SLUG/vouchers/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"code\": \"GUEST-{{ $json.speaker_code }}-1\",\n  \"max_usages\": 1,\n  \"item\": YOUR_GUEST_ITEM_ID,\n  \"price_mode\": \"set\",\n  \"value\": \"0.00\",\n  \"tag\": \"speaker-guests-{{ $json.talk_code }}\",\n  \"comment\": \"Invitado 1 de {{ $json.speaker_name }} ({{ $json.talk_title }})\",\n  \"valid_until\": \"2026-06-15T23:59:59Z\",\n  \"block_quota\": false,\n  \"allow_ignore_quota\": false\n}",
+        "options": {}
+      },
+      "id": "node-voucher-1",
+      "name": "POST Create Voucher 1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1980, -100],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PRETIX_CREDENTIAL_ID",
+          "name": "pretix API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://tickets.biznagafest.com/api/v1/organizers/YOUR_ORGANIZER_SLUG/events/YOUR_EVENT_SLUG/vouchers/",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"code\": \"GUEST-{{ $json.speaker_code }}-2\",\n  \"max_usages\": 1,\n  \"item\": YOUR_GUEST_ITEM_ID,\n  \"price_mode\": \"set\",\n  \"value\": \"0.00\",\n  \"tag\": \"speaker-guests-{{ $json.talk_code }}\",\n  \"comment\": \"Invitado 2 de {{ $json.speaker_name }} ({{ $json.talk_title }})\",\n  \"valid_until\": \"2026-06-15T23:59:59Z\",\n  \"block_quota\": false,\n  \"allow_ignore_quota\": false\n}",
+        "options": {}
+      },
+      "id": "node-voucher-2",
+      "name": "POST Create Voucher 2",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1980, 100],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PRETIX_CREDENTIAL_ID",
+          "name": "pretix API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge voucher results with speaker data\nconst prevData = $('Code - Save Order Data').item.json;\n\nreturn [{\n  json: {\n    ...prevData,\n    voucher_code_1: `GUEST-${prevData.speaker_code}-1`,\n    voucher_code_2: `GUEST-${prevData.speaker_code}-2`,\n    voucher_url_1: `https://tickets.biznagafest.com/YOUR_ORGANIZER_SLUG/YOUR_EVENT_SLUG/?voucher=GUEST-${prevData.speaker_code}-1`,\n    voucher_url_2: `https://tickets.biznagafest.com/YOUR_ORGANIZER_SLUG/YOUR_EVENT_SLUG/?voucher=GUEST-${prevData.speaker_code}-2`\n  }\n}];"
+      },
+      "id": "node-merge-vouchers",
+      "name": "Code - Merge Vouchers",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2200, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.resend.com/emails",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"from\": \"BiznagaFest <speakers@biznagafest.com>\",\n  \"to\": [\"{{ $json.speaker_email }}\"],\n  \"subject\": \"🎤 Tu participación en {{ $json.talk_title }} está confirmada\",\n  \"html\": \"<div style='font-family: sans-serif; max-width: 600px; margin: 0 auto;'><h1 style='color: #2c3e50;'>¡Hola {{ $json.speaker_name }}! 🎉</h1><p>Tu participación como speaker en <strong>BiznagaFest 2026</strong> ha sido confirmada.</p><h2 style='color: #3498db;'>Datos de tu charla</h2><table style='width: 100%; border-collapse: collapse;'><tr><td style='padding: 8px; border-bottom: 1px solid #eee;'><strong>Título</strong></td><td style='padding: 8px; border-bottom: 1px solid #eee;'>{{ $json.talk_title }}</td></tr><tr><td style='padding: 8px; border-bottom: 1px solid #eee;'><strong>Track</strong></td><td style='padding: 8px; border-bottom: 1px solid #eee;'>{{ $json.talk_track }}</td></tr><tr><td style='padding: 8px; border-bottom: 1px solid #eee;'><strong>Sala</strong></td><td style='padding: 8px; border-bottom: 1px solid #eee;'>{{ $json.talk_room }}</td></tr><tr><td style='padding: 8px; border-bottom: 1px solid #eee;'><strong>Horario</strong></td><td style='padding: 8px; border-bottom: 1px solid #eee;'>{{ $json.talk_start }} - {{ $json.talk_end }}</td></tr><tr><td style='padding: 8px; border-bottom: 1px solid #eee;'><strong>Duración</strong></td><td style='padding: 8px; border-bottom: 1px solid #eee;'>{{ $json.talk_duration }} minutos</td></tr></table><h2 style='color: #3498db;'>Tu entrada de speaker</h2><p>Ya hemos generado tu entrada automáticamente:</p><p><a href='{{ $json.pretix_order_url }}' style='background: #3498db; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;'>Ver mi entrada</a></p><h2 style='color: #3498db;'>Entradas para tus invitados</h2><p>Tienes <strong>2 entradas gratuitas</strong> para invitar a quien quieras:</p><p>🎟️ Invitado 1: <a href='{{ $json.voucher_url_1 }}'>Canjear entrada</a></p><p>🎟️ Invitado 2: <a href='{{ $json.voucher_url_2 }}'>Canjear entrada</a></p><p style='color: #7f8c8d; font-size: 0.9em;'>Cada enlace solo se puede usar una vez.</p><hr style='border: none; border-top: 1px solid #eee; margin: 24px 0;'/><p style='color: #7f8c8d; font-size: 0.85em;'>Email generado automáticamente. Dudas: orga@biznagafest.com</p></div>\"\n}",
+        "options": {}
+      },
+      "id": "node-send-email",
+      "name": "POST Send Email via Resend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2420, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "RESEND_CREDENTIAL_ID",
+          "name": "Resend API Key"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook - Pretalx": {
+      "main": [
+        [
+          {
+            "node": "Respond 200 OK",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "IF - Confirmed from Accepted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Confirmed from Accepted": {
+      "main": [
+        [
+          {
+            "node": "GET Submission Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Submission Details": {
+      "main": [
+        [
+          {
+            "node": "Telegram - Announce Talk",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Code - Split by Speaker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Split by Speaker": {
+      "main": [
+        [
+          {
+            "node": "GET Speaker Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Speaker Email": {
+      "main": [
+        [
+          {
+            "node": "Code - Merge Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Merge Email": {
+      "main": [
+        [
+          {
+            "node": "POST Create Pretix Order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST Create Pretix Order": {
+      "main": [
+        [
+          {
+            "node": "Code - Save Order Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Save Order Data": {
+      "main": [
+        [
+          {
+            "node": "POST Create Voucher 1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "POST Create Voucher 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST Create Voucher 1": {
+      "main": [
+        [
+          {
+            "node": "Code - Merge Vouchers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Merge Vouchers": {
+      "main": [
+        [
+          {
+            "node": "POST Send Email via Resend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "pretalx",
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "name": "pretix",
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "name": "speakers",
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    }
+  ],
+  "pinData": {}
+}

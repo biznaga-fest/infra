@@ -1,0 +1,8 @@
+FROM pretalx/standalone:v2025.2.2
+
+USER root
+
+RUN pip3 install --no-cache-dir \
+    "git+https://github.com/efdevcon/pretalx-webhook-plugin.git@main#egg=pretalx-webhook-plugin"
+
+USER pretalxuser

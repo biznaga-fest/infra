@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   pretix:
-    image: pretix/standalone:stable
+    image: pretix/standalone:2026.1.0
     container_name: pretix
     restart: unless-stopped
     depends_on:
@@ -11,26 +11,40 @@ services:
       redis:
         condition: service_healthy
     environment:
-      # Number of gunicorn workers (optional, defaults to 2x CPU cores)
       - NUM_WORKERS=4
-      # Site URL (required for host validation)
+      # [pretix]
       - PRETIX_PRETIX_URL=${PRETIX_URL}
-      # Database password (overrides pretix.cfg)
+      - PRETIX_PRETIX_INSTANCE_NAME=BiznagaFest Tickets
+      - PRETIX_PRETIX_CURRENCY=EUR
+      - PRETIX_PRETIX_DATADIR=/data
+      - PRETIX_PRETIX_TRUST_X_FORWARDED_FOR=on
+      - PRETIX_PRETIX_TRUST_X_FORWARDED_PROTO=on
+      # [database]
+      - PRETIX_DATABASE_BACKEND=postgresql
+      - PRETIX_DATABASE_NAME=pretix
+      - PRETIX_DATABASE_USER=pretix
       - PRETIX_DATABASE_PASSWORD=${POSTGRES_PASSWORD}
-      # SMTP settings (Amazon SES)
+      - PRETIX_DATABASE_HOST=postgres
+      - PRETIX_DATABASE_PORT=5432
+      # [mail] — Resend SMTP
       - PRETIX_MAIL_FROM=tickets@${DOMAIN}
-      - PRETIX_MAIL_HOST=${MAIL_HOST}
-      - PRETIX_MAIL_USER=${MAIL_USER}
-      - PRETIX_MAIL_PASSWORD=${MAIL_PASSWORD}
-      # Celery broker and backend (must be set as env vars)
-      - PRETIX_CELERY_BROKER=redis://redis:6379/2
-      - PRETIX_CELERY_BACKEND=redis://redis:6379/1
-      # Redis for caching/sessions
+      - PRETIX_MAIL_HOST=smtp.resend.com
+      - PRETIX_MAIL_PORT=587
+      - PRETIX_MAIL_USER=resend
+      - PRETIX_MAIL_PASSWORD=${RESEND_API_KEY}
+      - PRETIX_MAIL_TLS=on
+      - PRETIX_MAIL_SSL=off
+      # [redis]
       - PRETIX_REDIS_LOCATION=redis://redis:6379/0
       - PRETIX_REDIS_SESSIONS=true
+      # [celery]
+      - PRETIX_CELERY_BROKER=redis://redis:6379/2
+      - PRETIX_CELERY_BACKEND=redis://redis:6379/1
+      # [locale]
+      - PRETIX_LOCALE_DEFAULT=es
+      - PRETIX_LOCALE_TIMEZONE=Europe/Madrid
     volumes:
       - pretix-data:/data
-      - ./pretix.cfg:/etc/pretix/pretix.cfg:ro
     # Expose port 80 for Coolify's Traefik proxy
     expose:
       - "80"
@@ -44,16 +58,123 @@ services:
     networks:
       - pretix-network
 
+  pretalx:
+    build:
+      context: .
+      dockerfile: Dockerfile.pretalx
+    container_name: pretalx
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # Filesystem
+      - PRETALX_DATA_DIR=/data
+      - PRETALX_FILESYSTEM_MEDIA=/public/media
+      - PRETALX_FILESYSTEM_LOGS=/data/logs
+      - PRETALX_FILESYSTEM_STATIC=/public/static
+      # Site
+      - PRETALX_SITE_URL=https://cfp.biznagafest.com
+      # Database
+      - PRETALX_DB_TYPE=postgresql
+      - PRETALX_DB_NAME=pretalx
+      - PRETALX_DB_USER=pretalx_user
+      - PRETALX_DB_PASS=${PRETALX_DB_PASSWORD}
+      - PRETALX_DB_HOST=postgres
+      - PRETALX_DB_PORT=5432
+      # Mail — Resend SMTP
+      - PRETALX_MAIL_FROM=cfp@biznagafest.com
+      - PRETALX_MAIL_HOST=smtp.resend.com
+      - PRETALX_MAIL_PORT=587
+      - PRETALX_MAIL_USER=resend
+      - PRETALX_MAIL_PASSWORD=${RESEND_API_KEY}
+      - PRETALX_MAIL_TLS=on
+      - PRETALX_MAIL_SSL=off
+      # Redis (DB 3, pretix usa DB 0)
+      - PRETALX_REDIS=redis://redis:6379/3
+      - PRETALX_REDIS_SESSIONS=true
+      # Celery (DB 4-5, pretix usa DB 1-2)
+      - PRETALX_CELERY_BACKEND=redis://redis:6379/4
+      - PRETALX_CELERY_BROKER=redis://redis:6379/5
+      # Locale
+      - PRETALX_LANGUAGE_CODE=es
+      - PRETALX_TIME_ZONE=Europe/Madrid
+    volumes:
+      - pretalx-data:/data
+      - pretalx-public:/public
+    # Expose port 80 for Coolify's Traefik proxy
+    expose:
+      - "80"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/healthcheck/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - pretix-network
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:1.123.18
+    container_name: n8n
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # PostgreSQL backend
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=n8n
+      - DB_POSTGRESDB_USER=n8n
+      - DB_POSTGRESDB_PASSWORD=${N8N_DB_PASSWORD}
+      # Public URL and webhook config
+      - N8N_HOST=${N8N_HOST}
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      - N8N_EDITOR_BASE_URL=${N8N_URL}
+      - WEBHOOK_URL=${N8N_URL}
+      # Reverse proxy support (Coolify/Traefik)
+      - N8N_PROXY_HOPS=1
+      # Security
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
+      # Task runners
+      - N8N_RUNNERS_ENABLED=true
+      # Timezone
+      - GENERIC_TIMEZONE=Europe/Madrid
+      - TZ=Europe/Madrid
+    volumes:
+      - n8n-data:/home/node/.n8n
+    # Expose port 5678 for Coolify's Traefik proxy
+    expose:
+      - "5678"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:5678/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - pretix-network
+
   postgres:
-    image: postgres:15-alpine
+    image: postgres:16-alpine
     container_name: pretix-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: pretix
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Lion1234}
       POSTGRES_DB: pretix
+      # Passed to init-db.sh for creating pretalx and n8n databases
+      PRETALX_DB_PASSWORD: ${PRETALX_DB_PASSWORD}
+      N8N_DB_PASSWORD: ${N8N_DB_PASSWORD}
     volumes:
       - postgres-data:/var/lib/postgresql/data
+      - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pretix -d pretix"]
       interval: 10s
@@ -79,8 +200,11 @@ services:
 
 volumes:
   pretix-data:
+  pretalx-data:
+  pretalx-public:
   postgres-data:
   redis-data:
+  n8n-data:
 
 networks:
   pretix-network:
