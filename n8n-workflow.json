@@ -107,7 +107,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Submission data from the GET request\nconst submission = $input.first().json;\n\n// Build one item per speaker\nconst speakers = submission.speakers.map(speaker => ({\n  // Speaker data\n  speaker_code: speaker.code,\n  speaker_name: speaker.name,\n  speaker_email: speaker.email || null,\n  speaker_biography: speaker.biography,\n  speaker_avatar: speaker.avatar,\n\n  // Talk data (copied for each speaker)\n  talk_code: submission.code,\n  talk_title: submission.title,\n  talk_abstract: submission.abstract,\n  talk_track: submission.track?.en || submission.track || 'Sin track',\n  talk_type: submission.submission_type?.en || submission.submission_type || 'Talk',\n  talk_duration: submission.duration,\n  talk_room: submission.slot?.room?.en || submission.slot?.room || 'Por definir',\n  talk_start: submission.slot?.start || 'Por definir',\n  talk_end: submission.slot?.end || 'Por definir',\n  talk_image: submission.image,\n  talk_locale: submission.content_locale || 'es',\n\n  // Metadata for pretix\n  all_speakers: submission.speakers.map(s => s.name).join(', '),\n  speaker_count: submission.speakers.length\n}));\n\nreturn speakers.map(s => ({ json: s }));"
+        "jsCode": "// Submission data from the GET request\nconst submission = $input.first().json;\n\n// Build one item per speaker\nconst speakers = submission.speakers.map(speaker => ({\n  // Speaker data\n  speaker_code: speaker.code,\n  speaker_name: speaker.name,\n  speaker_email: speaker.email || null,\n  speaker_biography: speaker.biography,\n  speaker_avatar: speaker.avatar,\n\n  // Talk data (copied for each speaker)\n  talk_code: submission.code,\n  talk_title: submission.title,\n  talk_abstract: submission.abstract,\n  talk_track: submission.track?.en || submission.track || 'Sin track',\n  talk_type: submission.submission_type?.en || submission.submission_type || 'Talk',\n  talk_duration: submission.duration,\n  talk_room: submission.slot?.room?.en || submission.slot?.room || 'Por definir',\n  talk_start: submission.slot?.start || 'Por definir',\n  talk_end: submission.slot?.end || 'Por definir',\n  talk_image: submission.image,\n  talk_locale: submission.content_locale || 'es',\n\n  // Metadata for pretix\n  all_speakers: submission.speakers.map(s => s.name).join(', '),\n  speaker_count: submission.speakers.length,\n\n  // Event slug for downstream API calls\n  event_slug: submission.event || submission.slot?.event || 'biznagafest-2026'\n}));\n\nreturn speakers.map(s => ({ json: s }));"
       },
       "id": "node-split-speakers",
       "name": "Code - Split by Speaker",
@@ -118,7 +118,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://cfp.biznagafest.com/api/events/{{ $json.talk_code.split('-')[0] || 'biznagafest-2026' }}/speakers/{{ $json.speaker_code }}/",
+        "url": "=https://cfp.biznagafest.com/api/events/{{ $json.event_slug }}/speakers/{{ $json.speaker_code }}/",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "options": {}
@@ -257,6 +257,157 @@
           "name": "Resend API Key"
         }
       }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $credentials.strapiUrl || 'YOUR_STRAPI_URL' }}/api/speakers?filters[name][$eq]={{ encodeURIComponent($json.speaker_name) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "node-strapi-check",
+      "name": "GET Check Speaker in Strapi",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2420, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "STRAPI_CREDENTIAL_ID",
+          "name": "Strapi API Token"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-strapi-not-exists",
+              "leftValue": "={{ $json.data.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-strapi-if",
+      "name": "IF Speaker Not Exists",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2640, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Code - Merge Vouchers').item.json.speaker_avatar }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "node-strapi-download-avatar",
+      "name": "GET Download Speaker Avatar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2860, 300],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare speaker data for Strapi v5 REST API\nconst prevData = $('Code - Merge Vouchers').item.json;\n\n// Convert biography text to Strapi v5 richtext (blocks) format\nconst biographyText = prevData.speaker_biography || '';\nconst descriptionBlocks = biographyText\n  .split('\\n\\n')\n  .filter(p => p.trim())\n  .map(paragraph => ({\n    type: 'paragraph',\n    children: [{ type: 'text', text: paragraph.trim() }]\n  }));\n\n// If no paragraphs, add empty one\nif (descriptionBlocks.length === 0) {\n  descriptionBlocks.push({\n    type: 'paragraph',\n    children: [{ type: 'text', text: '' }]\n  });\n}\n\n// Build Strapi data payload\nconst strapiData = {\n  name: prevData.speaker_name,\n  description: descriptionBlocks,\n  socials: {\n    mail: prevData.speaker_email || undefined\n  }\n};\n\n// Pass data as JSON string for multipart form\nconst item = $input.first();\nitem.json.strapiData = JSON.stringify({ data: strapiData });\nitem.json.speaker_name = prevData.speaker_name;\n\nreturn [item];"
+      },
+      "id": "node-strapi-prepare",
+      "name": "Code - Prepare Strapi Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3080, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $credentials.strapiUrl || 'YOUR_STRAPI_URL' }}/api/speakers",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formData",
+              "name": "data",
+              "value": "={{ $json.strapiData }}"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "files.picture",
+              "inputDataFieldName": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node-strapi-create",
+      "name": "POST Create Speaker in Strapi",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3300, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "STRAPI_CREDENTIAL_ID",
+          "name": "Strapi API Token"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format Strapi error for Telegram notification\nconst prevData = $('Code - Merge Vouchers').item.json;\nconst errorResponse = $input.first().json;\n\nconst errorMessage = errorResponse?.error?.message\n  || errorResponse?.message\n  || JSON.stringify(errorResponse).substring(0, 500);\n\nconst statusCode = errorResponse?.error?.status\n  || errorResponse?.statusCode\n  || 'unknown';\n\nreturn [{\n  json: {\n    speaker_name: prevData.speaker_name,\n    speaker_email: prevData.speaker_email,\n    talk_title: prevData.talk_title,\n    error_message: errorMessage,\n    error_status: statusCode,\n    raw_error: JSON.stringify(errorResponse).substring(0, 1000)\n  }\n}];"
+      },
+      "id": "node-strapi-error-format",
+      "name": "Code - Format Strapi Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3520, 500]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/bot{{ $credentials.telegramBotToken || 'YOUR_BOT_TOKEN' }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"chat_id\": \"YOUR_TELEGRAM_CHAT_ID\",\n  \"parse_mode\": \"HTML\",\n  \"text\": \"⚠️ <b>Error al crear speaker en Strapi</b>\\n\\n👤 <b>Speaker:</b> {{ $json.speaker_name }}\\n📧 <b>Email:</b> {{ $json.speaker_email }}\\n📌 <b>Charla:</b> {{ $json.talk_title }}\\n\\n❌ <b>Error ({{ $json.error_status }}):</b>\\n<code>{{ $json.error_message }}</code>\\n\\n🔍 Revisa la ejecución en n8n para más detalles.\"\n}",
+        "options": {}
+      },
+      "id": "node-strapi-error-telegram",
+      "name": "Telegram - Strapi Error Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3740, 500]
+    },
+    {
+      "parameters": {
+        "errorMessage": "=Strapi speaker creation failed for {{ $json.speaker_name }}: {{ $json.error_message }}"
+      },
+      "id": "node-strapi-error-stop",
+      "name": "Stop and Error - Strapi",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [3960, 500]
     }
   ],
   "connections": {
@@ -381,6 +532,89 @@
             "node": "POST Send Email via Resend",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "GET Check Speaker in Strapi",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Check Speaker in Strapi": {
+      "main": [
+        [
+          {
+            "node": "IF Speaker Not Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Speaker Not Exists": {
+      "main": [
+        [
+          {
+            "node": "GET Download Speaker Avatar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Download Speaker Avatar": {
+      "main": [
+        [
+          {
+            "node": "Code - Prepare Strapi Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Prepare Strapi Data": {
+      "main": [
+        [
+          {
+            "node": "POST Create Speaker in Strapi",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST Create Speaker in Strapi": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Code - Format Strapi Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Format Strapi Error": {
+      "main": [
+        [
+          {
+            "node": "Telegram - Strapi Error Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram - Strapi Error Alert": {
+      "main": [
+        [
+          {
+            "node": "Stop and Error - Strapi",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -403,6 +637,11 @@
     },
     {
       "name": "speakers",
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "name": "strapi",
       "createdAt": "2026-01-01T00:00:00.000Z",
       "updatedAt": "2026-01-01T00:00:00.000Z"
     }
