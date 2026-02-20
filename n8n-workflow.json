@@ -525,6 +525,17 @@
         ]
       ]
     },
+    "POST Create Voucher 2": {
+      "main": [
+        [
+          {
+            "node": "Code - Merge Vouchers",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Code - Merge Vouchers": {
       "main": [
         [
