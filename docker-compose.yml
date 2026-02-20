@@ -38,8 +38,8 @@ services:
       - PRETIX_LOCALE_TIMEZONE=Europe/Madrid
     volumes:
       - pretix-data:/data
-    expose:
-      - "80"
+    ports:
+      - "80:80"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/healthcheck/"]
       interval: 30s
@@ -88,8 +88,8 @@ services:
     volumes:
       - pretalx-data:/data
       - pretalx-public:/public
-    expose:
-      - "80"
+    ports:
+      - "81:80"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/healthcheck/"]
       interval: 30s
@@ -127,8 +127,8 @@ services:
       - TZ=Europe/Madrid
     volumes:
       - n8n-data:/home/node/.n8n
-    expose:
-      - "5678"
+    ports:
+      - "5678:5678"
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:5678/healthz"]
       interval: 30s
