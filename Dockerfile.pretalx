@@ -3,6 +3,6 @@ FROM pretalx/standalone:v2025.2.2
 USER root
 
 RUN pip3 install --no-cache-dir \
-    "git+https://github.com/efdevcon/pretalx-webhook-plugin.git@main#egg=pretalx-webhook-plugin"
+    "git+https://github.com/efdevcon/pretalx-webhook-plugin.git@21a8d2e5688df8f1a6e2791382d7e6bad1f1ac9f#egg=pretalx-webhook-plugin"
 
 USER pretalxuser
