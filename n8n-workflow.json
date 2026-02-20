@@ -1,5 +1,6 @@
 {
   "name": "Pretalx → Pretix Speaker Pipeline",
+  "notes": "SETUP REQUIRED: Before activating this workflow, configure these values in n8n credentials and node settings:\n\n1. PRETALX_CREDENTIAL_ID - Create HTTP Header Auth credential with pretalx API token\n2. PRETIX_CREDENTIAL_ID - Create HTTP Header Auth credential with pretix API token\n3. RESEND_CREDENTIAL_ID - Create HTTP Header Auth credential with Resend API key\n4. STRAPI_CREDENTIAL_ID - Create HTTP Header Auth credential with Strapi API token\n5. YOUR_ORGANIZER_SLUG - Replace in nodes: POST Create Pretix Order, POST Create Voucher 1/2, Code - Save Order Data, Code - Merge Vouchers\n6. YOUR_EVENT_SLUG - Replace in same nodes as above\n7. YOUR_SPEAKER_ITEM_ID - Pretix item ID for speaker tickets (POST Create Pretix Order)\n8. YOUR_GUEST_ITEM_ID - Pretix item ID for guest vouchers (POST Create Voucher 1/2)\n9. YOUR_TELEGRAM_CHAT_ID - Telegram group/channel ID for notifications\n10. YOUR_BOT_TOKEN - Telegram bot token (or set in n8n credentials as telegramBotToken)",
   "nodes": [
     {
       "parameters": {
