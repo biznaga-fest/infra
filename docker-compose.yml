@@ -15,12 +15,12 @@ services:
       # [database]
       - PRETIX_DATABASE_BACKEND=postgresql
       - PRETIX_DATABASE_NAME=pretix
-      - PRETIX_DATABASE_USER=pretix
-      - PRETIX_DATABASE_PASSWORD=${PRETIX_DB_PASSWORD}
+      - PRETIX_DATABASE_USER=${POSTGRES_USER}
+      - PRETIX_DATABASE_PASSWORD=${POSTGRES_PASSWORD}
       - PRETIX_DATABASE_HOST=${POSTGRES_HOST}
       - PRETIX_DATABASE_PORT=${POSTGRES_PORT}
       # [mail] — Resend SMTP
-      - PRETIX_MAIL_FROM=tickets@${DOMAIN}
+      - PRETIX_MAIL_FROM=tickets@biznagafest.com
       - PRETIX_MAIL_HOST=smtp.resend.com
       - PRETIX_MAIL_PORT=587
       - PRETIX_MAIL_USER=resend
@@ -28,11 +28,11 @@ services:
       - PRETIX_MAIL_TLS=on
       - PRETIX_MAIL_SSL=off
       # [redis]
-      - PRETIX_REDIS_LOCATION=redis://${REDIS_HOST}:${REDIS_PORT}/0
+      - PRETIX_REDIS_LOCATION=redis://default:${REDIS_PASSWORD}@${REDIS_HOST}:${REDIS_PORT}/0
       - PRETIX_REDIS_SESSIONS=true
       # [celery]
-      - PRETIX_CELERY_BROKER=redis://${REDIS_HOST}:${REDIS_PORT}/2
-      - PRETIX_CELERY_BACKEND=redis://${REDIS_HOST}:${REDIS_PORT}/1
+      - PRETIX_CELERY_BROKER=redis://default:${REDIS_PASSWORD}@${REDIS_HOST}:${REDIS_PORT}/2
+      - PRETIX_CELERY_BACKEND=redis://default:${REDIS_PASSWORD}@${REDIS_HOST}:${REDIS_PORT}/1
       # [locale]
       - PRETIX_LOCALE_DEFAULT=es
       - PRETIX_LOCALE_TIMEZONE=Europe/Madrid
@@ -64,8 +64,8 @@ services:
       # Database
       - PRETALX_DB_TYPE=postgresql
       - PRETALX_DB_NAME=pretalx
-      - PRETALX_DB_USER=pretalx_user
-      - PRETALX_DB_PASS=${PRETALX_DB_PASSWORD}
+      - PRETALX_DB_USER=${POSTGRES_USER}
+      - PRETALX_DB_PASS=${POSTGRES_PASSWORD}
       - PRETALX_DB_HOST=${POSTGRES_HOST}
       - PRETALX_DB_PORT=${POSTGRES_PORT}
       # Mail — Resend SMTP
@@ -77,11 +77,11 @@ services:
       - PRETALX_MAIL_TLS=on
       - PRETALX_MAIL_SSL=off
       # Redis (DB 3, pretix uses DB 0)
-      - PRETALX_REDIS=redis://${REDIS_HOST}:${REDIS_PORT}/3
+      - PRETALX_REDIS=redis://default:${REDIS_PASSWORD}@${REDIS_HOST}:${REDIS_PORT}/3
       - PRETALX_REDIS_SESSIONS=true
       # Celery (DB 4-5, pretix uses DB 1-2)
-      - PRETALX_CELERY_BACKEND=redis://${REDIS_HOST}:${REDIS_PORT}/4
-      - PRETALX_CELERY_BROKER=redis://${REDIS_HOST}:${REDIS_PORT}/5
+      - PRETALX_CELERY_BACKEND=redis://default:${REDIS_PASSWORD}@${REDIS_HOST}:${REDIS_PORT}/4
+      - PRETALX_CELERY_BROKER=redis://default:${REDIS_PASSWORD}@${REDIS_HOST}:${REDIS_PORT}/5
       # Locale
       - PRETALX_LANGUAGE_CODE=es
       - PRETALX_TIME_ZONE=Europe/Madrid
@@ -107,8 +107,8 @@ services:
       - DB_POSTGRESDB_HOST=${POSTGRES_HOST}
       - DB_POSTGRESDB_PORT=${POSTGRES_PORT}
       - DB_POSTGRESDB_DATABASE=n8n
-      - DB_POSTGRESDB_USER=n8n
-      - DB_POSTGRESDB_PASSWORD=${N8N_DB_PASSWORD}
+      - DB_POSTGRESDB_USER=${POSTGRES_USER}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
       # Public URL and webhook config
       - N8N_HOST=${N8N_HOST}
       - N8N_PORT=5678
