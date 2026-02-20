@@ -76,10 +76,10 @@ services:
       - PRETALX_MAIL_PASSWORD=${RESEND_API_KEY}
       - PRETALX_MAIL_TLS=on
       - PRETALX_MAIL_SSL=off
-      # Redis (DB 3, pretix usa DB 0)
+      # Redis (DB 3, pretix uses DB 0)
       - PRETALX_REDIS=redis://${REDIS_HOST}:${REDIS_PORT}/3
       - PRETALX_REDIS_SESSIONS=true
-      # Celery (DB 4-5, pretix usa DB 1-2)
+      # Celery (DB 4-5, pretix uses DB 1-2)
       - PRETALX_CELERY_BACKEND=redis://${REDIS_HOST}:${REDIS_PORT}/4
       - PRETALX_CELERY_BROKER=redis://${REDIS_HOST}:${REDIS_PORT}/5
       # Locale
