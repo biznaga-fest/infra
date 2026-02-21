@@ -1,8 +1,1 @@
 FROM pretalx/standalone:v2025.2.2
-
-USER root
-
-RUN pip3 install --no-cache-dir \
-    "https://github.com/efdevcon/pretalx-webhook-plugin/archive/21a8d2e5688df8f1a6e2791382d7e6bad1f1ac9f.tar.gz"
-
-USER pretalxuser
