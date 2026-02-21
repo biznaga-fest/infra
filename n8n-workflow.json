@@ -4,71 +4,61 @@
   "nodes": [
     {
       "parameters": {
-        "httpMethod": "POST",
-        "path": "pretalx-confirmed",
-        "responseMode": "responseNode",
-        "options": {}
-      },
-      "id": "node-webhook",
-      "name": "Webhook - Pretalx",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2,
-      "position": [0, 0],
-      "webhookId": "pretalx-confirmed"
-    },
-    {
-      "parameters": {
-        "respondWith": "allIncomingItems",
-        "options": {}
-      },
-      "id": "node-respond",
-      "name": "Respond 200 OK",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1,
-      "position": [220, 0]
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
+        "rule": {
+          "interval": [
             {
-              "id": "cond-state",
-              "leftValue": "={{ $json.submission.state }}",
-              "rightValue": "confirmed",
-              "operator": {
-                "type": "string",
-                "operation": "equals"
-              }
-            },
-            {
-              "id": "cond-old-state",
-              "leftValue": "={{ $json.submission.old_state }}",
-              "rightValue": "accepted",
-              "operator": {
-                "type": "string",
-                "operation": "equals"
-              }
+              "field": "minutes",
+              "minutesInterval": 5
             }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
+          ]
+        }
       },
-      "id": "node-filter",
-      "name": "IF - Confirmed from Accepted",
-      "type": "n8n-nodes-base.if",
+      "id": "node-schedule",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://cfp.biznagafest.com/api/events/YOUR_PRETALX_EVENT_SLUG/submissions/?state=confirmed&limit=100",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "redirect": {
+            "redirect": {
+              "followRedirects": true
+            }
+          }
+        }
+      },
+      "id": "node-get-confirmed",
+      "name": "GET Confirmed Submissions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [220, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PRETALX_CREDENTIAL_ID",
+          "name": "pretalx API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Dedup layer 1: filter out already-processed submissions using static data\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.processedCodes) {\n  staticData.processedCodes = [];\n}\n\nconst submissions = $input.first().json.results || [];\nconst newSubmissions = submissions.filter(\n  s => !staticData.processedCodes.includes(s.code)\n);\n\nif (newSubmissions.length === 0) {\n  return []; // Nothing new, stop execution\n}\n\n// Return one item per new submission with code and event slug\nreturn newSubmissions.map(s => ({\n  json: {\n    submission_code: s.code,\n    event_slug: s.event || 'YOUR_PRETALX_EVENT_SLUG'\n  }\n}));"
+      },
+      "id": "node-filter-new",
+      "name": "Code - Filter New Submissions",
+      "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [440, 0]
     },
     {
       "parameters": {
         "method": "GET",
-        "url": "={{ $('Webhook - Pretalx').item.json.body.pretalx_url || 'https://cfp.biznagafest.com' }}/api/events/{{ $json.event_slug || $json.submission.event }}/submissions/{{ $json.submission.code }}/?expand=speakers,track,submission_type,slots.room",
+        "url": "=https://cfp.biznagafest.com/api/events/{{ $json.event_slug }}/submissions/{{ $json.submission_code }}/?expand=speakers,track,submission_type,slots.room",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "options": {
@@ -412,23 +402,29 @@
     }
   ],
   "connections": {
-    "Webhook - Pretalx": {
+    "Schedule Trigger": {
       "main": [
         [
           {
-            "node": "Respond 200 OK",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "IF - Confirmed from Accepted",
+            "node": "GET Confirmed Submissions",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "IF - Confirmed from Accepted": {
+    "GET Confirmed Submissions": {
+      "main": [
+        [
+          {
+            "node": "Code - Filter New Submissions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Filter New Submissions": {
       "main": [
         [
           {
