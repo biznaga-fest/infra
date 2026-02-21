@@ -139,6 +139,55 @@
     },
     {
       "parameters": {
+        "method": "GET",
+        "url": "=https://tickets.biznagafest.com/api/v1/organizers/YOUR_ORGANIZER_SLUG/events/YOUR_EVENT_SLUG/orders/?search={{ encodeURIComponent('Speaker entry - Auto-created from pretalx (' + $json.talk_code + ')') }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "node-check-pretix-order",
+      "name": "GET Check Existing Pretix Order",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1430, 0],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "PRETIX_CREDENTIAL_ID",
+          "name": "pretix API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-no-existing-order",
+              "leftValue": "={{ $json.count }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "node-if-no-order",
+      "name": "IF No Existing Order",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1540, 0]
+    },
+    {
+      "parameters": {
         "method": "POST",
         "url": "=https://tickets.biznagafest.com/api/v1/organizers/YOUR_ORGANIZER_SLUG/events/YOUR_EVENT_SLUG/orders/",
         "authentication": "genericCredentialType",
@@ -152,7 +201,7 @@
       "name": "POST Create Pretix Order",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1540, 0],
+      "position": [1650, 0],
       "credentials": {
         "httpHeaderAuth": {
           "id": "PRETIX_CREDENTIAL_ID",
@@ -168,7 +217,7 @@
       "name": "Code - Save Order Data",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1760, 0]
+      "position": [1870, 0]
     },
     {
       "parameters": {
@@ -185,7 +234,7 @@
       "name": "POST Create Voucher 1",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1980, -100],
+      "position": [2090, -100],
       "credentials": {
         "httpHeaderAuth": {
           "id": "PRETIX_CREDENTIAL_ID",
@@ -208,7 +257,7 @@
       "name": "POST Create Voucher 2",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1980, 100],
+      "position": [2090, 100],
       "credentials": {
         "httpHeaderAuth": {
           "id": "PRETIX_CREDENTIAL_ID",
@@ -224,7 +273,7 @@
       "name": "Code - Merge Vouchers",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2200, 0]
+      "position": [2310, 0]
     },
     {
       "parameters": {
@@ -241,7 +290,7 @@
       "name": "POST Send Email via Resend",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2420, 0],
+      "position": [2530, 0],
       "credentials": {
         "httpHeaderAuth": {
           "id": "RESEND_CREDENTIAL_ID",
@@ -261,7 +310,7 @@
       "name": "GET Check Speaker in Strapi",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2420, 300],
+      "position": [2530, 300],
       "credentials": {
         "httpHeaderAuth": {
           "id": "STRAPI_CREDENTIAL_ID",
@@ -297,7 +346,7 @@
       "name": "IF Speaker Not Exists",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [2640, 300]
+      "position": [2750, 300]
     },
     {
       "parameters": {
@@ -315,7 +364,7 @@
       "name": "GET Download Speaker Avatar",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2860, 300],
+      "position": [2970, 300],
       "onError": "continueRegularOutput"
     },
     {
@@ -326,7 +375,7 @@
       "name": "Code - Prepare Strapi Data",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3080, 300]
+      "position": [3190, 300]
     },
     {
       "parameters": {
@@ -356,7 +405,7 @@
       "name": "POST Create Speaker in Strapi",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [3300, 300],
+      "position": [3410, 300],
       "credentials": {
         "httpHeaderAuth": {
           "id": "STRAPI_CREDENTIAL_ID",
@@ -373,7 +422,7 @@
       "name": "Code - Format Strapi Error",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [3520, 500]
+      "position": [3630, 500]
     },
     {
       "parameters": {
@@ -388,7 +437,7 @@
       "name": "Telegram - Strapi Error Alert",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [3740, 500]
+      "position": [3850, 500]
     },
     {
       "parameters": {
@@ -398,7 +447,7 @@
       "name": "Stop and Error - Strapi",
       "type": "n8n-nodes-base.stopAndError",
       "typeVersion": 1,
-      "position": [3960, 500]
+      "position": [4070, 500]
     }
   ],
   "connections": {
@@ -474,6 +523,28 @@
       ]
     },
     "Code - Merge Email": {
+      "main": [
+        [
+          {
+            "node": "GET Check Existing Pretix Order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Check Existing Pretix Order": {
+      "main": [
+        [
+          {
+            "node": "IF No Existing Order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF No Existing Order": {
       "main": [
         [
           {
