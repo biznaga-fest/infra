@@ -109,11 +109,11 @@ services:
     expose:
       - "80"
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost/static/common/img/icons/favicon.ico"]
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost/nginx-health"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 15s
+      start_period: 10s
 
   n8n:
     image: docker.n8n.io/n8nio/n8n:1.123.18
@@ -167,6 +167,13 @@ configs:
         listen 80;
         server_name _;
         client_max_body_size 50M;
+
+        # Container healthcheck endpoint (no dependencies)
+        location = /nginx-health {
+          access_log off;
+          add_header Content-Type text/plain;
+          return 200 "ok\n";
+        }
 
         # Pretalx media (user uploads: logos, banners, avatars, attachments)
         location /media/ {
