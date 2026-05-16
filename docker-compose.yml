@@ -95,6 +95,26 @@ services:
       retries: 5
       start_period: 60s
 
+  pretalx-nginx:
+    image: nginx:1.27-alpine
+    container_name: pretalx-nginx
+    restart: unless-stopped
+    depends_on:
+      - pretalx
+    volumes:
+      - pretalx-public:/public:ro
+    configs:
+      - source: pretalx_nginx_conf
+        target: /etc/nginx/conf.d/default.conf
+    expose:
+      - "80"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost/static/common/img/icons/favicon.ico"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+
   n8n:
     image: docker.n8n.io/n8nio/n8n:1.123.18
     container_name: n8n
@@ -139,3 +159,41 @@ volumes:
   pretalx-data:
   pretalx-public:
   n8n-data:
+
+configs:
+  pretalx_nginx_conf:
+    content: |
+      server {
+        listen 80;
+        server_name _;
+        client_max_body_size 50M;
+
+        # Pretalx media (user uploads: logos, banners, avatars, attachments)
+        location /media/ {
+          alias /public/media/;
+          access_log off;
+          expires 7d;
+          add_header Cache-Control "public, immutable";
+        }
+
+        # Pretalx static assets (CSS, JS, fonts)
+        location /static/ {
+          alias /public/static/;
+          access_log off;
+          expires 30d;
+          add_header Cache-Control "public, immutable";
+        }
+
+        # Everything else → gunicorn (pretalx app)
+        location / {
+          proxy_pass http://pretalx:80;
+          proxy_http_version 1.1;
+          proxy_set_header Host              $host;
+          proxy_set_header X-Real-IP         $remote_addr;
+          proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $http_x_forwarded_proto;
+          proxy_set_header X-Forwarded-Host  $host;
+          proxy_redirect off;
+          proxy_read_timeout 120s;
+        }
+      }
